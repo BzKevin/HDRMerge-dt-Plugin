@@ -37,7 +37,7 @@ Version 0.1 - Implemented via "Selected Images"
 Version 0.2 - Implemented as it's own module - windows only
 Version 0.3 - Improved cross-platform compatibility, improved performance ( switched from io.popen() to dt.control.execute() )
 Version 1.0 - Added:
-					Copy Tags Option
-					Additional Tags Option
-					User Defined Default Style
-					Progress Bar
+			Copy Tags Option
+			Additional Tags Option
+			User Defined Default Style
+			Progress Bar
