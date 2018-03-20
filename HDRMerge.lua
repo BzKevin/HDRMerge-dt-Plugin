@@ -16,7 +16,7 @@
   along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 ]]
 
---[[	Version 1.0     3/17/2018
+--[[	Version 1.0.1     3/20/2018
 
 This plugin adds the module "HDRMerge" to darktable's lighttable view
 
@@ -55,6 +55,8 @@ Version 1.0 - Added:
 					Additional Tags Option
 					User Defined Default Style
 					Progress Bar
+		1.0.1 - Added check for at least 2 images selected
+				Fixed issue with status bar not disappearing when HDRmerge not installed or not enough images selected
 ]]
 
 local dt = require "darktable"
@@ -105,22 +107,15 @@ local function HDRMerge()
 	dt.print("Running HDRMerge")
 	gui_job = dt.gui.create_job("HDRMerge", 1)
 	
-	
-	local HDRMerge_Path = df.check_if_bin_exists("hdrmerge")
-	if not HDRMerge_Path then
-		dt.print_error("HDRMerge not found")
-		dt.print("ERROR - HDRMerge not found")
-		return
-	end
-  
 	--Inits--
-	images = dt.gui.selection()
-	images_to_merge = ""
-	image_path = ""
-	curr_image = ""
-	first_image = ""
-	last_image = ""
-	output_file = ""
+	local images = dt.gui.selection()
+	local images_to_merge = ""
+	local image_path = ""
+	local curr_image = ""
+	local first_image = ""
+	local last_image = ""
+	local output_file = ""
+	local num_images = 0
 	
 	--Read Settings--
 	set_bps = HDRMerge_cmbx_bps.value
@@ -137,8 +132,26 @@ local function HDRMerge()
 		last_image = string.gsub(string.match(image.filename,'^.*%.'), "%." , "")
 		image_path = image.path
 		if _ == 1 then first_image = last_image end
+		num_images = num_images + 1
 	end
 	output_file = image_path..os_path_seperator..first_image.."-"..string.match(last_image, '%d*$')..".dng"
+	
+	--Check if at least 2 images selected--
+	if num_images < 2 then
+		dt.print_error("Less than 2 images selected")
+		dt.print("ERROR - please select at least 2 images")
+		gui_job.valid = false
+		return
+	end
+	
+	--Check if HDRMerge is installed--
+	local HDRMerge_Path = df.check_if_bin_exists("hdrmerge")
+	if not HDRMerge_Path then
+		dt.print_error("HDRMerge not found")
+		dt.print("ERROR - HDRMerge not found")
+		gui_job.valid = false
+		return
+	end
 	
 	--Create Run Command--
 	run_cmd = " -b "..set_bps.." -p "..set_size
