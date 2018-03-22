@@ -16,7 +16,7 @@
   along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 ]]
 
---[[	Version 1.0.1     3/20/2018
+--[[	Version 1.0.2     3/20/2018
 
 This plugin adds the module "HDRMerge" to darktable's lighttable view
 
@@ -57,6 +57,8 @@ Version 1.0 - Added:
 					Progress Bar
 		1.0.1 - Added check for at least 2 images selected
 				Fixed issue with status bar not disappearing when HDRmerge not installed or not enough images selected
+		1.0.2 - Changes for grabbing executable path and setting preference (to imporve cross-platform support)
+				Changes to building the run_cmd (to improve cross-platform support)
 ]]
 
 local dt = require "darktable"
@@ -91,8 +93,6 @@ end
 pref_cpytags = dt.preferences.read("module_HDRMerge", "copy_tags", "bool")
 pref_addtags = dt.preferences.read("module_HDRMerge", "add_tags", "string")
 pref_style = dt.preferences.read("module_HDRMerge", "style", "string")
---pref_batch = dt.preferences.read("module_HDRMerge", "batch_mode", "bool") --default: false
---pref_gap = dt.preferences.read("module_HDRMerge", "batch_gap", "integer") --default: 3
 
 --Detect User Styles--
 styles = dt.styles
@@ -101,11 +101,32 @@ for _,i in pairs(dt.styles) do
 	if type(i) == "userdata" then styles_count = styles_count + 1 end
 end
 
+function build_execute_command(cmd, args, file_list)
+	local result = false
+
+	if dt.configuration.running_os == "macos" then
+		if not string.match(cmd, "^open ") then
+			cmd = "open -W -a "..cmd
+		end
+		if string.length(args) > 1 then
+			result = cmd .. " " .. file_list .. " --args " .. args
+		else
+			result = cmd .. " " .. file_list
+		end
+	else
+		result = cmd .. " " .. args .. " " .. file_list
+	end
+
+	return result
+end
+
 -- FUNCTION --
 local function HDRMerge()
 	dt.print_log("Running HDRMerge")
 	dt.print("Running HDRMerge")
 	gui_job = dt.gui.create_job("HDRMerge", 1)
+	df.set_executable_path_preference("hdrmerge", dt.preferences.read("module_HDRMerge", "bin_path", "string"))
+	dt.print_log("Executable Path Preference: "..df.get_executable_path_preference("hdrmerge"))
 	
 	--Inits--
 	local images = dt.gui.selection()
@@ -153,19 +174,20 @@ local function HDRMerge()
 		return
 	end
 	
-	--Create Run Command--
-	run_cmd = " -b "..set_bps.." -p "..set_size
+	--Create Command Args--
+	cmd_args = "-b "..set_bps.." -p "..set_size
 	if (set_batch) then 
-		run_cmd = run_cmd.." -B -g "..set_gap.." -a "
-	else
-		run_cmd = run_cmd.." -o "..output_file.." "
+		cmd_args = cmd_args.." -B -g "..set_gap.." -a"
+	else                                              --add ability to launch with gui here by omiting -o arg
+		cmd_args = cmd_args.." -o "..output_file
 	end  
 	
 	gui_job.percent = .1
 	
 	--Execute with Run Command--
-	dt.print_log(HDRMerge_Path..run_cmd..images_to_merge)
-	resp = dt.control.execute(HDRMerge_Path..run_cmd..images_to_merge)
+	run_cmd = build_execute_command(HDRMerge_Path, cmd_args, images_to_merge)
+	dt.print_log("run_cmd = "..run_cmd)
+	resp = dt.control.execute(run_cmd)
 	
 	gui_job.percent = .9
 	
@@ -212,6 +234,11 @@ local function HDRMerge()
 end
 
 -- GUI --
+local executables = {"hdrmerge"}
+if dt.configuration.running_os ~= "linux" then
+  path_widget = df.executable_path_widget(executables)
+end
+
 HDRMerge_lbl_base= dt.new_widget("section_label"){
      label = "Base Options",
 	}
@@ -354,10 +381,16 @@ dt.preferences.register("module_HDRMerge", "bits_per_sample",	-- name
 	"16",	-- default
 	"24","32"	--value
 )
-local executables = {"hdrmerge"}
-if dt.configuration.running_os ~= "linux" then
-  path_widget = df.executable_path_widget(executables)
+executable = "hdrmerge"
+bin_path = df.get_executable_path_preference(executable)
+if not bin_path then 
+	bin_path = ""
 end
+path_widget = dt.new_widget("file_chooser_button"){
+	title = "Select HDRMerge[.exe] file",
+	value = bin_path,
+	is_directory = false,
+}
 dt.preferences.register("module_HDRMerge", "bin_path",	-- name
 	"file",	-- type
 	'HDRMerge: Binary Location',	-- label
@@ -365,19 +398,3 @@ dt.preferences.register("module_HDRMerge", "bin_path",	-- name
 	"hdrmerge",	-- default
 	path_widget
 )
---[[ These Prefs aren't really useful
-dt.preferences.register("module_HDRMerge", "batch_mode",	-- name
-	"bool",	-- type
-	'HDRMerge: Run in "Batch" mode' by default,	-- label
-	'Accessed at time of button press, run in batch mode',	-- tooltip
-	false	-- default
-) 
-dt.preferences.register("module_HDRMerge", "batch_gap",	-- name
-	"integer",	-- type
-	'HDRMerge: Default Batch Gap [sec]',	-- label
-	'Set the gap, in seconds, between batch groups',	-- tooltip
-	3,	-- default
-	1,	-- min
-	60	-- max
-)
-]]
