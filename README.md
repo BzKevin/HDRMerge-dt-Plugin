@@ -1,8 +1,6 @@
 # HDRMerge-dt-Plugin 
 HDRMerge plugin for darktable
 
-## Version 1.0     3/17/2018
-
 This plugin adds the module "HDRMerge" to darktable's lighttable view.
 
 ## Dependencies: 
@@ -23,15 +21,7 @@ Style - Style to be applied when image is auto-imported (Auto-import only suppor
 Copy Tags - Enable to copy tags from first file in selection.
 Additional Tags - Additional tags to be added, works with or without Copy Tags enabled.
 
-## Known Bugs / Deficiencies: 
-CMD window pops up when run
-Slider double-click sets to 31, not 3
-Removes spaces from tags (desired to only removed spaces at front and end)
-
-## Features for future releases: 
-None - to request a feature create an issue titled "Feature - title"
-
-##Versions
+## Versions:
 Version 0.1 - Implemented via "Selected Images"
 Version 0.2 - Implemented as it's own module - windows only
 Version 0.3 - Improved cross-platform compatibility, improved performance ( switched from io.popen() to dt.control.execute() )
@@ -40,3 +30,7 @@ Version 1.0 - Added:
 			Additional Tags Option
 			User Defined Default Style
 			Progress Bar
+	1.0.1 - Added check for at least 2 images selected
+		Fixed issue with status bar not disappearing when HDRmerge not installed or not enough images selected
+	1.0.2 - Changes for grabbing executable path and setting preference (to imporve cross-platform support)
+		Changes to building the run_cmd (to improve cross-platform support)
