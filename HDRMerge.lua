@@ -74,18 +74,14 @@ function build_execute_command(cmd, args, file_list)
 	local result = false
 
 	if dt.configuration.running_os == "macos" then
-		if not string.match(cmd, "^open ") then
-			cmd = "open -W -a "..cmd
-		end
-		if string.length(args) > 1 then
-			result = cmd .. " " .. file_list .. " --args " .. args
-		else
-			result = cmd .. " " .. file_list
-		end
-	else
-		result = cmd .. " " .. args .. " " .. file_list
+		cmd = string.gsub(cmd, "open", "", 1)
+		cmd = string.gsub(cmd, "-W", "", 1)
+		cmd = string.gsub(cmd, "-a", "", 1)
+	--	result = cmd.." "..file_list.." "..args
+	--else
+	--	result = cmd..""..args.." "..file_list
 	end
-
+	result = cmd.." "..args.." "..file_list
 	return result
 end
 
