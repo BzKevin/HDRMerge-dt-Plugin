@@ -1,4 +1,4 @@
---[[	HDRMerge plugin for darktable
+--[[HDRMerge plugin for darktable
 
   copyright (c) 2018  Kevin Ertel
   
@@ -16,34 +16,58 @@
   along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 ]]
 
---[[	Version 1.0.2     3/20/2018
-
+--[[About this Plugin
 This plugin adds the module "HDRMerge" to darktable's lighttable view
 
-****Dependencies****
-OS: Windows (tested), Linux (not verified), MacOS (not verified)
-HDRMerge 4.5 or greater
+----REQUIRED SOFTWARE----
+HDRMerge ver. 4.5 or greater
 
-****How to use****
-Require this file from your luarc file, as with any other dt plug-in.
-On initial run setup HDRMerge's install path via the settings > lua options dialog. Restart may be required.
-Select a group of photos you desire to merge and press HDRMerge
+----USAGE----
+Install: (see here for more detail: https://github.com/darktable-org/lua-scripts )
+ 1) Copy this file in to your "lua/contrib" folder where all other scripts reside. 
+ 2) Require this file in your luarc file, as with any other dt plug-in
+On the initial startup go to darktable settings > lua options and set your executable paths and other preferences, then restart darktable
+
+Select bracketed images and press the Run HDRMerge button. The resulting DNG will be auto-imported into darktable if you have that option enabled.
+Additional tags or style can be applied on auto import as well, if you desire.
+
+Base Options:
+Select your desired BPS and Preview Size. 
+
+Batch Options:
+Select if you want to run in batch mode or not
+Select the gap, in seconds, between images for auto grouping in batch mode
+
+See HDRMerge manual for further detail: http://jcelaya.github.io/hdrmerge/documentation/2014/07/11/user-manual.html
+
+Auto-import Options:
+Select a style, whether you want tags to be copied from the original, and any additional tags you desire added when the new image is auto-imported
+
+----KNOWN ISSUES----
 ]]
 
 local dt = require "darktable"
 local df = require "lib/dtutils.file"
+local dsys = require "lib/dtutils.system"
 require "official/yield"
 
---Detect OS and modify accordingly--	
-op_sys = dt.configuration.running_os
-if op_sys == "windows" then
-	os_path_seperator = "\\"
-else
-	os_path_seperator = "/"
+--Check if HDRMerge is installed--
+local not_installed = 0
+dt.print_log("HDRMerge - Executable Path Preference: "..df.get_executable_path_preference("HDRMerge"))
+local HDRMerge_path = df.check_if_bin_exists("HDRMerge")
+if not HDRMerge_path then
+	dt.print_error("HDRMerge not found")
+	dt.print("ERROR - HDRMerge not found")
+	not_installed = 1
 end
 
+--Detect OS and modify accordingly--	
+local os_path_seperator = "/"
+if dt.configuration.running_os == "windows" then os_path_seperator = "\\" end
+
 -- READ PREFERENCES --
-pref_bps = dt.preferences.read("module_HDRMerge", "bits_per_sample", "enum")
+local pref_bps = dt.preferences.read("module_HDRMerge", "bits_per_sample", "enum")
+local pref_bps_enum = 0
 if pref_bps == "32" then
 	pref_bps_enum = 3
 elseif pref_bps == "24" then
@@ -51,7 +75,8 @@ elseif pref_bps == "24" then
 else
 	pref_bps_enum = 1
 end
-pref_size = dt.preferences.read("module_HDRMerge", "preview_size", "enum")
+local pref_size = dt.preferences.read("module_HDRMerge", "preview_size", "enum")
+local pref_size_enum = 0
 if pref_size == "none" then
 	pref_size_enum = 3
 elseif pref_size == "full" then
@@ -59,39 +84,31 @@ elseif pref_size == "full" then
 else
 	pref_size_enum = 1
 end
-pref_cpytags = dt.preferences.read("module_HDRMerge", "copy_tags", "bool")
-pref_addtags = dt.preferences.read("module_HDRMerge", "add_tags", "string")
-pref_style = dt.preferences.read("module_HDRMerge", "style", "string")
+--pref_cpytags = dt.preferences.read("module_HDRMerge", "copy_tags", "bool")
+--pref_addtags = dt.preferences.read("module_HDRMerge", "add_tags", "string")
+local pref_style = dt.preferences.read("module_HDRMerge", "style", "string")
 
 --Detect User Styles--
-styles = dt.styles
-styles_count = 1 -- "none" = 1
+local styles = dt.styles
+local styles_count = 1 -- "none" = 1
 for _,i in pairs(dt.styles) do
 	if type(i) == "userdata" then styles_count = styles_count + 1 end
 end
 
-function build_execute_command(cmd, args, file_list)
-	local result = false
-
-	if dt.configuration.running_os == "macos" then
-		cmd = string.gsub(cmd, "open", "", 1)
-		cmd = string.gsub(cmd, "-W", "", 1)
-		cmd = string.gsub(cmd, "-a", "", 1)
-	--	result = cmd.." "..file_list.." "..args
-	--else
-	--	result = cmd..""..args.." "..file_list
-	end
-	result = cmd.." "..args.." "..file_list
+-- FUNCTION --
+local function build_execute_command(cmd, args, file_list)
+	local result = cmd.." "..args.." "..file_list
 	return result
 end
-
--- FUNCTION --
 local function HDRMerge()
+	if not_installed == 1 then
+		dt.print("Required software not found")
+		dt.print_log("Required software not found - HDRMerge did not run")
+		return
+	end
 	dt.print_log("Running HDRMerge")
 	dt.print("Running HDRMerge")
 	gui_job = dt.gui.create_job("HDRMerge", 1)
-	df.set_executable_path_preference("hdrmerge", dt.preferences.read("module_HDRMerge", "bin_path", "string"))
-	dt.print_log("Executable Path Preference: "..df.get_executable_path_preference("hdrmerge"))
 	
 	--Inits--
 	local images = dt.gui.selection()
@@ -104,37 +121,29 @@ local function HDRMerge()
 	local num_images = 0
 	
 	--Read Settings--
-	set_bps = HDRMerge_cmbx_bps.value
-	set_size = HDRMerge_cmbx_size.value
-	set_batch = HDRMerge_chkbtn_batch.value
-	set_gap = HDRMerge_sldr_gap.value
-	set_cpytags = HDRMerge_chkbtn_cpytags.value
-	set_tag = HDRMerge_entry_tag.text
+	local set_bps = HDRMerge_cmbx_bps.value
+	local set_size = HDRMerge_cmbx_size.value
+	local set_batch = HDRMerge_chkbtn_batch.value
+	local set_gap = HDRMerge_sldr_gap.value
+	local set_cpytags = HDRMerge_chkbtn_cpytags.value
+	local set_tag = HDRMerge_entry_tag.text
 	
 	--Create Images String--
 	for _,image in pairs(images) do 
 		curr_image = image.path..os_path_seperator..image.filename
-		images_to_merge = images_to_merge..curr_image.." "
+		images_to_merge = images_to_merge..df.sanitize_filename(curr_image).." "
 		last_image = string.gsub(string.match(image.filename,'^.*%.'), "%." , "")
 		image_path = image.path
 		if _ == 1 then first_image = last_image end
 		num_images = num_images + 1
 	end
 	output_file = image_path..os_path_seperator..first_image.."-"..string.match(last_image, '%d*$')..".dng"
-	
+	output_file = df.create_unique_filename(output_file)
+	--output_file = df.sanitize_filename(output_file)
 	--Check if at least 2 images selected--
 	if num_images < 2 then
 		dt.print_error("Less than 2 images selected")
 		dt.print("ERROR - please select at least 2 images")
-		gui_job.valid = false
-		return
-	end
-	
-	--Check if HDRMerge is installed--
-	local HDRMerge_Path = df.check_if_bin_exists("hdrmerge")
-	if not HDRMerge_Path then
-		dt.print_error("HDRMerge not found")
-		dt.print("ERROR - HDRMerge not found")
 		gui_job.valid = false
 		return
 	end
@@ -144,15 +153,15 @@ local function HDRMerge()
 	if (set_batch) then 
 		cmd_args = cmd_args.." -B -g "..set_gap.." -a"
 	else                                              --add ability to launch with gui here by omiting -o arg
-		cmd_args = cmd_args.." -o "..output_file
+		cmd_args = cmd_args.." -o "..df.sanitize_filename(output_file)
 	end  
 	
 	gui_job.percent = .1
 	
 	--Execute with Run Command--
-	run_cmd = build_execute_command(HDRMerge_Path, cmd_args, images_to_merge)
+	run_cmd = build_execute_command(HDRMerge_path, cmd_args, images_to_merge)
 	dt.print_log("run_cmd = "..run_cmd)
-	resp = dt.control.execute(run_cmd)
+	resp = dsys.external_command(run_cmd)
 	
 	gui_job.percent = .9
 	
@@ -199,11 +208,6 @@ local function HDRMerge()
 end
 
 -- GUI --
-local executables = {"hdrmerge"}
-if dt.configuration.running_os ~= "linux" then
-  path_widget = df.executable_path_widget(executables)
-end
-
 HDRMerge_lbl_base= dt.new_widget("section_label"){
      label = "Base Options",
 	}
@@ -248,14 +252,14 @@ HDRMerge_cmbx_style = dt.new_widget("combobox"){
 	"none",
 	}
 pref_style_enum = 1
-	for k=1, (styles_count-1) do
-		HDRMerge_cmbx_style[k+1] = styles[k].name
+for k=1, (styles_count-1) do
+	HDRMerge_cmbx_style[k+1] = styles[k].name
 	if styles[k].name == pref_style then pref_style_enum = k+1 end
 end
 HDRMerge_cmbx_style.value = pref_style_enum
 HDRMerge_chkbtn_cpytags = dt.new_widget("check_button"){
     label = '  Copy Tags', 
-    value = pref_cpytags,
+    value = dt.preferences.read("module_HDRMerge", "copy_tags", "bool"),
     tooltip ='Copy tags from first image. When operating in batch mode this will NOT be performed. \ndefault: (true).',  
 	}
 HDRMerge_lbl_tags= dt.new_widget("label"){
@@ -263,7 +267,7 @@ HDRMerge_lbl_tags= dt.new_widget("label"){
 	}
 HDRMerge_entry_tag = dt.new_widget("entry"){
 	tooltip = "Additional tags to be added on import. Seperate with commas, all spaces will be removed",
-	text = pref_addtags,
+	text = dt.preferences.read("module_HDRMerge", "add_tags", "string"),
 	placeholder = "Enter tags, seperated by commas",
 	editable = true
 }
@@ -300,7 +304,7 @@ dt.register_lib(
 )
 
 -- PREFERENCES --
-entry_widget_tags = dt.new_widget("entry"){
+HDRMerge_entry_widget_tags = dt.new_widget("entry"){
 	tooltip = "Seperate with commas, all spaces will be removed",
 	text = nil,
 	placeholder = "Enter default tags",
@@ -311,9 +315,9 @@ dt.preferences.register("module_HDRMerge", "add_tags",	-- name
 	'HDRMerge: Defualt additional tags',	-- label
 	'Changes DEFAULT entry in the additional tags option. Requires restart to take effect.',	-- tooltip
 	"",	-- default
-	entry_widget_tags
+	HDRMerge_entry_widget_tags
 ) 
-entry_widget_style = dt.new_widget("entry"){
+HDRMerge_entry_widget_style = dt.new_widget("entry"){
 	tooltip = "Enter the style name exactly as it is",
 	text = nil,
 	placeholder = "Enter Style name",
@@ -324,7 +328,7 @@ dt.preferences.register("module_HDRMerge", "style",	-- name
 	'HDRMerge: Defualt Style',	-- label
 	'Changes DEFAULT entry in the Style option. Requires restart to take effect.',	-- tooltip
 	"",	-- default
-	entry_widget_style
+	HDRMerge_entry_widget_style
 ) 
 dt.preferences.register("module_HDRMerge", "copy_tags",	-- name
 	"bool",	-- type
@@ -346,20 +350,19 @@ dt.preferences.register("module_HDRMerge", "bits_per_sample",	-- name
 	"16",	-- default
 	"24","32"	--value
 )
-executable = "hdrmerge"
-bin_path = df.get_executable_path_preference(executable)
-if not bin_path then 
-	bin_path = ""
+
+if not HDRMerge_path then 
+	HDRMerge_path = ""
 end
-path_widget = dt.new_widget("file_chooser_button"){
+HDRMerge_path_widget = dt.new_widget("file_chooser_button"){
 	title = "Select HDRMerge[.exe] file",
-	value = bin_path,
+	value = HDRMerge_path,
 	is_directory = false,
 }
-dt.preferences.register("module_HDRMerge", "bin_path",	-- name
+dt.preferences.register("executable_paths", "HDRMerge",	-- name
 	"file",	-- type
 	'HDRMerge: Binary Location',	-- label
 	'Install location of HDRMerge[.exe]. Requires restart to take effect.',	-- tooltip
-	"hdrmerge",	-- default
-	path_widget
+	"HDRMerge",	-- default
+	HDRMerge_path_widget
 )
